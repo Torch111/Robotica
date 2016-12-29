@@ -12,8 +12,8 @@ import serial
 
 
 # initialize servo motor
-panServoPosition = int(120)
-tiltServoPosition = int(50)
+panServoPosition = int(90)
+tiltServoPosition = int(90)
 
 usbport = '/dev/ttyUSB0'
 ser = serial.Serial(usbport, 9600, timeout=1)		# Set up serial baud rate
@@ -29,32 +29,44 @@ ser.write(chr(tiltServoPosition))
 
 class Face(object):
 
-	def __init__(self, camera, PiRGBArray):
+	def __init__(self, camera):
 		self.res_x = 640
 		self.res_y = 480
 		self.intXFrameCenter = int(float(self.res_x / 2.0))
 		self.intYFrameCenter = int(float(self.res_y / 2.0))
 
 		self.camera = camera
-		self.rawCapture = PiRGBArray
+		self.rawCapture = PiRGBArray(camera, size=(640, 480))
 		self.camera.resolution = (self.res_x, self.res_y)
 		self.framerate = 32
-
-	def getFrame(self, frame):
+	
+	def getImg(self, frame):
 		img = frame.array
 		img = cv2.flip(img,1)
+		return img
+	
+	def getFaceCascade(self):
 		# call Haar Cascade function 
 		face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+		return face_cascade
+	
+	def getEyeCascade(self):
 		eye_cascade = cv2.CascadeClassifier('haarcascade_eye.xml')
-		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)			# convert to gray scale
+		return eye_cascade
+		
+	def getFaces(self, gray, face_cascade):
 		faces = face_cascade.detectMultiScale(gray, 1.3, 5)		# face detection
 		return faces
+		
+	def getGray(self, img):
+		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		return gray
 
-	def dispFrame(self):
+	def dispFrame(self, img):
 		cv2.namedWindow("Original", cv2.WINDOW_NORMAL)
 		cv2.imshow("Original", img)
 
-	def calcError(self, faces):
+	def calcError(self, faces, img, eye_cascade, gray):
 		for (x,y,w,h) in faces:
 			cv2.rectangle(img, (x,y), (x+w, y+h), (255,0,0), 2)
 			roi_gray = gray[y:y+h, x:x+w]
@@ -77,14 +89,15 @@ class Face(object):
 
 	def step(self):
 		for frame in self.camera.capture_continuous(self.rawCapture, format="bgr", use_video_port=True):
-			self.calcerror(self.getFrame(frame))
-			self.dispFrame()
-			rawCapture.truncate(0)
+			image = self.getImg(frame)
+			self.calcError(self.getFaces(self.getGray(image), self.getFaceCascade()), image, self.getEyeCascade(), self.getGray(image))
+			self.dispFrame(image)
+			self.rawCapture.truncate(0)
 			key = cv2.waitKey(512) & 0xFF
 			if key == ord("q"):
 				break
 
-face = Face(PiCamera(), PiRGBArray(camera, size=(640, 480)))
+face = Face(PiCamera())
 
 while True:
 	time.sleep(0.1)
